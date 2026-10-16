@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VxZ Security Panel</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',monospace; }
+  body { background:#0a0e14; color:#c9d1d9; padding:20px; }
+  .container { max-width:1100px; margin:auto; }
+  h1 { color:#58a6ff; font-size:22px; border-bottom:1px solid #21262d; padding-bottom:10px; margin-bottom:20px; }
+  h1 span { color:#f0883e; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .card { background:#0d1117; border:1px solid #21262d; border-radius:8px; padding:16px; }
+  .card h2 { font-size:14px; color:#58a6ff; margin-bottom:12px; text-transform:uppercase; letter-spacing:1px; }
+  input, textarea, select {
+    width:100%; background:#010409; border:1px solid #30363d; color:#c9d1d9;
+    padding:8px 10px; border-radius:6px; margin-bottom:8px; font-size:13px; font-family:monospace;
+  }
+  input:focus, textarea:focus { outline:none; border-color:#58a6ff; }
+  button {
+    background:#238636; color:#fff; border:none; padding:8px 16px; border-radius:6px;
+    cursor:pointer; font-size:13px; font-weight:600; width:100%; margin-bottom:6px;
+  }
+  button:hover { background:#2ea043; }
+  button.alt { background:#1f6feb; } button.alt:hover { background:#388bfd; }
+  button.danger { background:#da3633; } button.danger:hover { background:#f85149; }
+  .output {
+    background:#010409; border:1px solid #30363d; border-radius:6px; padding:10px;
+    font-size:12px; font-family:monospace; white-space:pre-wrap; word-break:break-all;
+    min-height:60px; max-height:200px; overflow-y:auto; color:#7ee787;
+  }
+  .output.err { color:#f85149; }
+  .row { display:flex; gap:8px; }
+  .row button { flex:1; }
+  .status { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; }
+  .safe { background:#1a3a1a; color:#7ee787; }
+  .susp { background:#3a2a1a; color:#f0883e; }
+  .phish { background:#3a1a1a; color:#f85149; }
+  .full { grid-column:1/-1; }
+  small { color:#484f58; font-size:11px; display:block; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>VxZ <span>Security & Bot Panel</span></h1>
+
+  <div class="grid">
+
+    <!-- CEK DOMAIN PHISING -->
+    <div class="card">
+      <h2>🔍 Cek Domain Phising</h2>
+      <small>Analisis URL: typosquatting, suspicious TLD, IP-based, panjang subdomain.</small>
+      <input id="urlCheck" placeholder="https://contoh-domain.xyz/login" />
+      <button class="alt" onclick="checkPhising()">Analisis Domain</button>
+      <div class="output" id="outPhising">Menunggu input...</div>
+    </div>
+
+    <!-- SSWEB -->
+    <div class="card">
+      <h2>📸 SSWeb (Screenshot Web)</h2>
+      <small>Pratinjau situs target via layanan screenshot publik.</small>
+      <input id="sswebUrl" placeholder="https://target.com" />
+      <div class="row">
+        <button class="alt" onclick="ssweb('desktop')">Desktop</button>
+        <button class="alt" onclick="ssweb('mobile')">Mobile</button>
+      </div>
+      <div id="sswebResult" class="output">Menunggu input...</div>
+    </div>
+
+    <!-- SECURITY TOKEN -->
+    <div class="card">
+      <h2>🔐 Security Token Generator</h2>
+      <small>Generate token acak untuk autentikasi bot/sesi.</small>
+      <select id="tokenType">
+        <option value="hex">Hex (32 char)</option>
+        <option value="base64">Base64</option>
+        <option value="uuid">UUID v4</option>
+        <option value="apikey">API Key Format</option>
+      </select>
+      <button onclick="genToken()">Generate Token</button>
+      <div class="output" id="outToken">—</div>
+    </div>
+
+    <!-- RASUK TOKEN -->
+    <div class="card">
+      <h2>🎭 Rasuk Token (Token Injection)</h2>
+      <small>Decode & inspeksi struktur JWT / token. Cek payload tanpa verifikasi.</small>
+      <textarea id="rasukInput" rows="3" placeholder="Paste token JWT di sini..."></textarea>
+      <button class="danger" onclick="rasukToken()">Decode & Analisis</button>
+      <div class="output" id="outRasuk">—</div>
+    </div>
+
+    <!-- KONFIGURASI BOT -->
+    <div class="card">
+      <h2>🤖 Konfigurasi Bot</h2>
+      <small>Set nama bot & tagname. Generate config JSON.</small>
+      <input id="botName" placeholder="Nama Bot (cth: VxZ Guardian)" />
+      <input id="botTag" placeholder="Tagname (cth: @vxz_sec_bot)" />
+      <input id="botOwner" placeholder="Owner ID" />
+      <input id="botPrefix" placeholder="Prefix command (cth: ! . /)" maxlength="3" />
+      <button onclick="genBotConfig()">Generate Config Bot</button>
+      <div class="output" id="outBot">—</div>
+    </div>
+
+    <!-- TOOLS TAMBAHAN -->
+    <div class="card full">
+      <h2>⚙️ Tool Cepat</h2>
+      <div class="row">
+        <button class="alt" onclick="genPassword()">Password Kuat</button>
+        <button class="alt" onclick="genHash()">Hash String (SHA-256)</button>
+        <button class="alt" onclick="clearAll()">Bersihkan Output</button>
+      </div>
+      <div class="output" id="outTools">—</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ==================== CEK PHISING ====================
+function checkPhising() {
+  const out = document.getElementById('outPhising');
+  const raw = document.getElementById('urlCheck').value.trim();
+  if (!raw) { out.className='output err'; out.textContent='Isi URL dulu.'; return; }
+
+  let url;
+  try { url = new URL(raw.startsWith('http') ? raw : 'http://' + raw); }
+  catch(e) { out.className='output err'; out.textContent='URL tidak valid.'; return; }
+
+  const host = url.hostname;
+  const tld = host.split('.').pop();
+  const parts = host.split('.');
+  const subCount = parts.length - 2;
+  let score = 0;
+  let flags = [];
+
+  const badTld = ['xyz','tk','ml','ga','cf','gq','top','work','click','link','zip','mov'];
+  if (badTld.includes(tld)) { score += 30; flags.push('TLD mencurigakan: .'+tld); }
+
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) { score += 40; flags.push('Host berupa IP address'); }
+
+  if (subCount >= 3) { score += 20; flags.push('Subdomain berlapis ('+subCount+' level)'); }
+
+  const brandWords = ['bank','paypal','google','facebook','instagram','whatsapp','tokopedia','shopee','bri','bca','mandiri','dana','ovo','gopay'];
+  const found = brandWords.filter(b => host.includes(b));
+  if (found.length && !host.endsWith(found[0]+'.com')) {
+    score += 25; flags.push('Menyalahgunakan nama brand: '+found.join(', '));
+  }
+
+  if (host.includes('--') || host.includes('xn--')) { score += 25; flags.push('Punycode / karakter aneh'); }
+  if (raw.length > 100) { score += 10; flags.push('URL terlalu panjang'); }
+  if (host.includes('login') || host.includes('verify') || host.includes('secure') || host.includes('account')) {
+    score += 10; flags.push('Kata pancingan: login/verify/secure');
+  }
+
+  let status, cls;
+  if (score >= 50) { status = '⚠️ TERINDIKASI PHISING'; cls = 'phish'; }
+  else if (score >= 25) { status = '🟠 MENCURIGAKAN'; cls = 'susp'; }
+  else { status = '✅ RELATIF AMAN'; cls = 'safe'; }
+
+  out.className = 'output';
+  out.innerHTML = `<span class="status ${cls}">${status}</span>\n\n`
+    + `Host   : ${host}\n`
+    + `TLD    : .${tld}\n`
+    + `Skor   : ${score}/150\n`
+    + `Protokol: ${url.protocol}\n\n`
+    + `Temuan:\n${flags.length ? flags.map(f=>' • '+f).join('\n') : ' • Tidak ada indikator mencurigakan'}\n\n`
+    + `Catatan: Skor tinggi = makin patut dicurigasi, bukan bukti mutlak.`;
+}
+
+// ==================== SSWEB ====================
+function ssweb(mode) {
+  const url = document.getElementById('sswebUrl').value.trim();
+  const res = document.getElementById('sswebResult');
+  if (!url) { res.className='output err'; res.textContent='Isi URL dulu.'; return; }
+
+  const clean = url.startsWith('http') ? url : 'https://' + url;
+  const full = mode === 'mobile' ? '430x932' : '1440x900';
+
+  res.className = 'output';
+  res.innerHTML = `Mode: ${mode.toUpperCase()} (${full})\n`
+    + `Target: ${clean}\n\n`
+    + `Mengirim ke layanan screenshot publik...\n`
+    + `Buka manual:\n`
+    + `https://api.microlink.io/?url=${encodeURIComponent(clean)}&screenshot=true&meta=false\n`
+    + `https://image.thum.io/get/width/1200/${encodeURIComponent(clean)}\n\n`
+    + `Preview di tab baru.`;
+
+  window.open('https://image.thum.io/get/width/1200/' + clean, '_blank');
+}
+
+// ==================== SECURITY TOKEN ====================
+function genToken() {
+  const type = document.getElementById('tokenType').value;
+  const out = document.getElementById('outToken');
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let token = '';
+
+  if (type === 'hex') {
+    token = Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
+  } else if (type === 'base64') {
+    token = btoa(String.fromCharCode(...bytes)).replace(/=/g,'');
+  } else if (type === 'uuid') {
+    const b = bytes.slice(0,16);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b).map(x => x.toString(16).padStart(2,'0')).join('');
+    token = `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20,32)}`;
+  } else {
+    const p1 = Array.from(bytes.slice(0,8)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    const p2 = Array.from(bytes.slice(8,24)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    token = `vxz_${p1}_${p2}`;
+  }
+
+  out.className = 'output';
+  out.textContent = `Tipe  : ${type.toUpperCase()}\nToken :\n${token}\n\nPanjang: ${token.length} karakter`;
+}
+
+// ==================== RASUK TOKEN ====================
+function rasukToken() {
+  const out = document.getElementById('outRasuk');
+  const raw = document.getElementById('rasukInput').value.trim();
+  if (!raw) { out.className='output err'; out.textContent='Paste token dulu.'; return; }
+
+  const parts = raw.split('.');
+  let result = '';
+
+  if (parts.length === 3) {
+    try {
+      const header = JSON.parse(atob(parts[0].replace(/-/g,'+').replace(/_/g,'/')));
+      const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+      result += `=== STRUKTUR JWT VALID ===\n\n`;
+      result += `Header:\n${JSON.stringify(header,null,2)}\n\n`;
+      result += `Payload:\n${JSON.stringify(payload,null,2)}\n\n`;
+      result += `Signature (raw):\n${parts[2].slice(0,60)}...\n\n`;
+      if (payload.exp) {
+        const exp = new Date(payload.exp * 1000);
+        const now = new Date();
+        result += `Expired: ${exp.toLocaleString()}\n`;
+        result += `Status : ${exp > now ? 'MASIH AKTIF' : 'SUDAH EXPIRED'}\n`;
+      }
+      if (payload.iat) result += `Dibuat : ${new Date(payload.iat*1000).toLocaleString()}\n`;
+      out.className = 'output';
+      out.textContent = result;
+    } catch(e) {
+      out.className = 'output err';
+      out.textContent = 'Gagal decode JWT: ' + e.message;
+    }
+  } else {
+    // bukan JWT, cek struktur umum
+    try {
+      const dec = atob(raw.replace(/-/g,'+').replace(/_/g,'/'));
+      out.className = 'output';
+      out.textContent = `Terlihat base64.\n\nHasil decode:\n${dec}`;
+    } catch(e) {
+      out.className = 'output err';
+      out.textContent = 'Format token tidak dikenali (bukan JWT 3-bagian, bukan base64 valid).';
+    }
+  }
+}
+
+// ==================== KONFIGURASI BOT ====================
+function genBotConfig() {
+  const name = document.getElementById('botName').value.trim() || 'VxZ Bot';
+  const tag = document.getElementById('botTag').value.trim() || '@vxz_bot';
+  const owner = document.getElementById('botOwner').value.trim() || 'owner_id_001';
+  const prefix = document.getElementById('botPrefix').value.trim() || '!';
+
+  const config = {
+    bot: {
+      name: name,
+      tagname: tag,
+      owner_id: owner,
+      prefix: prefix,
+      version: '1.0.0',
+      created: new Date().toISOString()
+    },
+    security: {
+      token_required: true,
+      rate_limit: '30/min',
+      whitelist_only: false,
+      auto_ban: true
+    },
+    features: {
+      ssweb: true,
+      phising_check: true,
+      token_inject: true,
+      log_activity: true
+    }
+  };
+
+  const out = document.getElementById('outBot');
+  out.className = 'output';
+  out.textContent = JSON.stringify(config, null, 2);
+}
+
+// ==================== TOOLS ====================
+function genPassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*';
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  let pwd = '';
+  for (let i=0;i<20;i++) pwd += chars[bytes[i] % chars.length];
+  const out = document.getElementById('outTools');
+  out.className = 'output';
+  out.textContent = `Password: ${pwd}\nKekuatan: ${20} karakter, campuran simbul & angka.`;
+}
+
+async function genHash() {
+  const out = document.getElementById('outTools');
+  const input = prompt('Masukkan string untuk di-hash:');
+  if (!input) return;
+  const enc = new TextEncoder().encode(input);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  const hex = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  out.className = 'output';
+  out.textContent = `Input : ${input}\nSHA-256:\n${hex}`;
+}
+
+function clearAll() {
+  ['outPhising','outToken','outRasuk','outBot','outTools','sswebResult'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.className = 'output';
+    el.textContent = '—';
+  });
+  document.getElementById('outPhising').textContent = 'Menunggu input...';
+  document.getElementById('sswebResult').textContent = 'Menunggu input...';
+}
+</script>
+</body>
+</html>
